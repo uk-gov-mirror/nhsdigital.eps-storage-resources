@@ -1,28 +1,40 @@
-name: deploy_pr
+name: Pull Request
 
 on:
   pull_request:
     branches: [main]
-
-env:
-  BRANCH_NAME: ${{ github.event.pull_request.head.ref }}
+permissions: {}
 
 jobs:
+  get_config_values:
+    uses: NHSDigital/eps-common-workflows/.github/workflows/get-repo-config.yml@c4efd04c5ff1c7e92e7fe5932b29d0de1a301cdf # v6.0.14
+    with:
+      verify_published_from_main_image: false
+    permissions:
+      attestations: read
+      contents: read
+      packages: read
   quality_checks:
-    uses: NHSDigital/eps-workflow-quality-checks/.github/workflows/quality-checks.yml@v4.0.5
-    secrets:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    uses: NHSDigital/eps-common-workflows/.github/workflows/quality-checks-devcontainer.yml@c4efd04c5ff1c7e92e7fe5932b29d0de1a301cdf # v6.0.14
+    needs: [get_config_values]
+    with:
+      pinned_image: ${{ needs.get_config_values.outputs.pinned_image }}
+    permissions:
+      contents: read
+      id-token: write
+      packages: read
 
   pr_title_format_check:
-    uses: ./.github/workflows/pr_title_check.yml
+    uses: NHSDigital/eps-common-workflows/.github/workflows/pr_title_check.yml@c4efd04c5ff1c7e92e7fe5932b29d0de1a301cdf # v6.0.14
+    permissions:
+      pull-requests: write
 
   get_issue_number:
     runs-on: ubuntu-22.04
     outputs:
       issue_number: ${{steps.get_issue_number.outputs.result}}
-
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         name: get issue number
         id: get_issue_number
         with:
@@ -42,6 +54,19 @@ jobs:
             }
           result-encoding: string
 
+  tag_release:
+    needs: [get_config_values]
+    uses: NHSDigital/eps-common-workflows/.github/workflows/tag-release-devcontainer.yml@c4efd04c5ff1c7e92e7fe5932b29d0de1a301cdf # v6.0.14
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+    with:
+      dry_run: true
+      pinned_image: ${{ needs.get_config_values.outputs.pinned_image }}
+      branch_name: ${{ github.event.pull_request.head.ref }}
+      tag_format: ${{ needs.get_config_values.outputs.tag_format }}
+
   get_commit_id:
     runs-on: ubuntu-22.04
     outputs:
@@ -52,24 +77,29 @@ jobs:
         run: |
           echo "commit_id=${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
-  package_code:
-    needs: [get_issue_number, get_commit_id, quality_checks]
+  package_cdk_code:
     uses: ./.github/workflows/cdk_package_code.yml
+    needs: get_config_values
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
     with:
-      VERSION_NUMBER: PR-${{ needs.get_issue_number.outputs.issue_number }}
-      COMMIT_ID: ${{ needs.get_commit_id.outputs.commit_id }}
+      pinned_image: ${{ needs.get_config_values.outputs.pinned_image }}
 
-  release_code:
-    needs: [get_issue_number, package_code, get_commit_id, quality_checks]
+  deploy_pr_stack:
+    needs: [quality_checks, package_cdk_code, get_issue_number, tag_release, get_commit_id, get_config_values]
     uses: ./.github/workflows/cdk_release_code.yml
+    permissions:
+      contents: write
+      id-token: write
     with:
-      SERVICE_NAME: storage-resources-pr-${{needs.get_issue_number.outputs.issue_number}}
-      TARGET_ENVIRONMENT: dev-pr
-      VERSION_NUMBER: PR-${{ needs.get_issue_number.outputs.issue_number }}
-      COMMIT_ID: ${{ needs.get_commit_id.outputs.commit_id }}
-      CDK_APP_NAME: StorageResourcesApp
-      ALLOW_AUTO_DELETE_OBJECTS: true
+      pinned_image: ${{ needs.get_config_values.outputs.pinned_image }}
+      stack_name: storage-resources-pr-${{ needs.get_issue_number.outputs.issue_number }}
+      target_environment: dev-pr
+      version: pr-${{ needs.get_issue_number.outputs.issue_number }}
+      commit_id: ${{ needs.get_commit_id.outputs.commit_id }}
+      is_pull_request: true
     secrets:
-      CDK_PULL_IMAGE_ROLE: ${{ secrets.DEV_CDK_PULL_IMAGE_ROLE }}
       CLOUD_FORMATION_DEPLOY_ROLE: ${{ secrets.DEV_CLOUD_FORMATION_DEPLOY_ROLE }}
     

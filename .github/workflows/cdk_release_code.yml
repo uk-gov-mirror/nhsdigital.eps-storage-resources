@@ -3,128 +3,137 @@ name: cdk release code
 on:
   workflow_call:
     inputs:
-      SERVICE_NAME:
+      pinned_image:
+        type: string
+        required: true
+      stack_name:
         required: true
         type: string
-      TARGET_ENVIRONMENT:
+      target_environment:
         required: true
         type: string
-      VERSION_NUMBER:
+      version:
         required: true
         type: string
-      COMMIT_ID:
+      commit_id:
         required: true
         type: string
-      CDK_APP_NAME:
-        required: true
-        type: string
-      ALLOW_AUTO_DELETE_OBJECTS:
+      is_pull_request:
         required: true
         type: boolean
     secrets:
       CLOUD_FORMATION_DEPLOY_ROLE:
         required: true
-      CDK_PULL_IMAGE_ROLE:
-        required: true
+
+permissions: {}
+
 jobs:
-  release_code:
+  deploy_cdk_code:
     runs-on: ubuntu-22.04
-    environment: ${{ inputs.TARGET_ENVIRONMENT }}
-    name: deploy cdk app ${{ inputs.CDK_APP_NAME }}
+    container:
+      image: ${{ inputs.pinned_image }}
+      options: --user 1001:1001 --group-add 128
+    defaults:
+      run:
+        shell: bash
+    name: "Deploy cdk app StorageResourcesApp stack storage-resources"
+    environment: ${{ inputs.target_environment }}
     permissions:
       id-token: write
       contents: write
-
+    env:
+      AWS_MAX_RETRY: 20
     steps:
-      - name: Checkout local github actions
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ env.BRANCH_NAME }}
-          fetch-depth: 0
-          sparse-checkout: |
-            .github
-
-      - name: Configure AWS Credentials
-        id: connect-aws-pull-image
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-region: eu-west-2
-          role-to-assume: ${{ secrets.CDK_PULL_IMAGE_ROLE }}
-          role-session-name: eps-storage-resources-pull-image
+      - name: copy .tool-versions
+        run: |
+          cp /home/vscode/.tool-versions "$HOME/.tool-versions"
 
       - name: build_artifact download
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: build_artifact
+          name: cdk_build_artifact
 
       - name: extract build_artifact
         run: |
-          mkdir -p .build
-          tar -xf artifact.tar -C .build
+          tar -xf artifact.tar
 
-      - name: Retrieve AWS Account ID
-        id: retrieve-account-id
-        run: echo "ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)" >> "$GITHUB_ENV"
-
-      - name: Login to Amazon ECR
-        id: login-ecr
-        run: |
-          aws ecr get-login-password --region eu-west-2 | docker login --username AWS --password-stdin ${{ env.ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com
-
-      - name: Pull cdk-utils-build from Amazon ECR
-        run: |
-          docker pull "${{ env.ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com/cdk-utils-build-repo:latest"
-          docker tag "${{ env.ACCOUNT_ID }}.dkr.ecr.eu-west-2.amazonaws.com/cdk-utils-build-repo:latest" cdk-utils-build-repo:latest
-
-      - name: Configure AWS Credentials
-        id: connect-aws
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS Credentials for deploy
+        id: connect-aws-deploy
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
         with:
           aws-region: eu-west-2
           role-to-assume: ${{ secrets.CLOUD_FORMATION_DEPLOY_ROLE }}
-          role-session-name: eps-storage-resources-deployment
+          role-session-name: eps-storage-resources-cdk-release
           output-credentials: true
-  
-      - name: fix cdk.json for deployment
-        run: |
-          jq \
-          --arg serviceName "${{ inputs.SERVICE_NAME }}" \
-          --arg VERSION_NUMBER "${{ inputs.VERSION_NUMBER }}" \
-          --arg COMMIT_ID "${{ inputs.COMMIT_ID }}" \
-          --argjson allowAutoDeleteObjects "${{ inputs.ALLOW_AUTO_DELETE_OBJECTS }}" \
-          '.context += {
-            "serviceName": $serviceName,
-            "VERSION_NUMBER": $VERSION_NUMBER,
-            "COMMIT_ID": $COMMIT_ID,
-            "allowAutoDeleteObjects": $allowAutoDeleteObjects
-          }' \
-          .build/cdk.json > .build/cdk.new.json
-          mv .build/cdk.new.json .build/cdk.json
 
-      - name: Show diff
+      - name: Fix path
         run: |
-          docker run \
-          -v "$(pwd)/.build":/home/cdkuser/workspace/ \
-          -e AWS_ACCESS_KEY_ID=${{ steps.connect-aws.outputs.aws-access-key-id }} \
-          -e AWS_SECRET_ACCESS_KEY=${{ steps.connect-aws.outputs.aws-secret-access-key }} \
-          -e AWS_SESSION_TOKEN=${{ steps.connect-aws.outputs.aws-session-token }} \
-          -e AWS_REGION="eu-west-2" \
-          -e SHOW_DIFF="true" \
-          -e DEPLOY_CODE="false" \
-          -e CDK_APP_PATH="packages/cdk/bin/${{ inputs.CDK_APP_NAME }}.ts" \
-          cdk-utils-build-repo:latest
-        shell: bash
+          echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
 
-      - name: Deploy code
+      - name: "Run create changeset for cdk app StorageResourcesApp stack ${{ inputs.stack_name }} new tag"
         run: |
-          docker run \
-          -v "$(pwd)/.build":/home/cdkuser/workspace/ \
-          -e AWS_ACCESS_KEY_ID=${{ steps.connect-aws.outputs.aws-access-key-id }} \
-          -e AWS_SECRET_ACCESS_KEY=${{ steps.connect-aws.outputs.aws-secret-access-key }} \
-          -e AWS_SESSION_TOKEN=${{ steps.connect-aws.outputs.aws-session-token }} \
-          -e AWS_REGION="eu-west-2" \
-          -e SHOW_DIFF="false" \
-          -e DEPLOY_CODE="true" \
-          -e CDK_APP_PATH="packages/cdk/bin/${{ inputs.CDK_APP_NAME }}.ts" \
-          cdk-utils-build-repo:latest
+          # Changeset name must past this regex: [a-zA-Z][-a-zA-Z0-9]*|arn:[-a-zA-Z0-9:/]*
+          # See https://docs.aws.amazon.com/cli/latest/reference/cloudformation/describe-change-set.html
+          VERSION_NUMBER_HYTHENATED="${CDK_CONFIG_versionNumber//./-}"
+
+          CDK_CHANGE_SET_NAME="${CDK_CONFIG_stackName}-changeset-${VERSION_NUMBER_HYTHENATED}-$(date +%s)"
+          export CDK_CHANGE_SET_NAME
+          echo "CDK_CHANGE_SET_NAME=${CDK_CHANGE_SET_NAME}" >> "$GITHUB_ENV"
+          echo "Created changeset ${CDK_CHANGE_SET_NAME} for app StorageResourcesApp stack ${CDK_CONFIG_stackName}" >> "$GITHUB_STEP_SUMMARY"
+          npm run cdk-prepare-changeset --workspace cdk 2>&1 | tee "cdk_deploy_new_tag.log"
         shell: bash
+        env:
+          AWS_REGION: "eu-west-2"
+          CDK_APP_NAME: "StorageResourcesApp"
+          CDK_CONFIG_isPullRequest: ${{ inputs.is_pull_request }}
+          CDK_CONFIG_environment: "${{ inputs.target_environment }}"
+          CDK_CONFIG_commitId: "${{ inputs.commit_id }}"
+          CDK_CONFIG_versionNumber: "${{ inputs.version }}"
+          CDK_CONFIG_stackName: "${{ inputs.stack_name }}"
+          REQUIRE_APPROVAL: "never"
+          
+      - name: Execute change set
+        run: |
+          echo "Executing change set"
+          aws cloudformation execute-change-set \
+            --stack-name "${STACK_NAME}" \
+            --change-set-name "${CDK_CHANGE_SET_NAME}"
+        env:
+          STACK_NAME: ${{ inputs.stack_name }}
+
+      - name: Wait for change set execution to complete
+        run: |
+          echo "Waiting for change set execution to complete"
+          aws cloudformation wait stack-update-complete \
+            --region eu-west-2 \
+            --stack-name "${STACK_NAME}"
+        env:
+          STACK_NAME: ${{ inputs.stack_name }}
+
+      - name: Checkout gh-pages
+        if: inputs.is_pull_request == 'false'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: gh-pages
+          path: gh-pages
+          persist-credentials: false
+
+      - name: Update release tag in github pages
+        if: inputs.is_pull_request == 'false'
+        run: |
+          cd gh-pages
+          NOW=$(date +'%Y-%m-%dT%H:%M:%S')
+          echo "tag,release_datetime" > "_data/${TARGET_ENVIRONMENT}_${STACK_NAME}_${AWS_REGION}_latest.csv"
+          echo "${VERSION},${NOW}" >> "_data/${TARGET_ENVIRONMENT}_${STACK_NAME}_${AWS_REGION}_latest.csv"
+          echo "${VERSION},${NOW}" >> "_data/${TARGET_ENVIRONMENT}_${STACK_NAME}_${AWS_REGION}_deployments.csv"
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add "_data/${TARGET_ENVIRONMENT}_${STACK_NAME}_${AWS_REGION}_latest.csv"
+          git add "_data/${TARGET_ENVIRONMENT}_${STACK_NAME}_${AWS_REGION}_deployments.csv"
+          git commit -m "update releases for ${TARGET_ENVIRONMENT} and stack ${STACK_NAME}"
+          parallel --retries 10 --delay 3 ::: "git pull --rebase && git push"
+        env:
+          STACK_NAME: ${{ inputs.stack_name }}
+          TARGET_ENVIRONMENT: ${{ inputs.target_environment }}
+          VERSION: ${{ inputs.version }}
+          AWS_REGION: "eu-west-2"

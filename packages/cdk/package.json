@@ -10,12 +10,14 @@
     "check-licenses": "license-checker --failOn GPL --failOn LGPL --start ../.."
   },
   "dependencies": {
-    "aws-cdk-lib": "^2.180.0",
-    "cdk-nag": "^2.35.31",
-    "constructs": "^10.4.2",
-    "source-map-support": "^0.5.21"
+    "@nhsdigital/eps-cdk-constructs": "^1.6.1",
+    "aws-cdk-lib": "^2.244.0",
+    "cdk-nag": "^2.37.55",
+    "constructs": "^10.4.5",
+    "tsx": "^4.21.0"
   },
   "devDependencies": {
-    "aws-cdk": "^2.1000.3"
+    "@types/node": "^25.6.0",
+    "aws-cdk": "^2.1112.0"
   }
 }

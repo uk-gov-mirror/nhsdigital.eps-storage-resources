@@ -1,12 +1,15 @@
-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
-// README at: https://github.com/devcontainers/templates/tree/main/src/ubuntu
 {
-  "name": "Ubuntu",
-  // Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+  "name": "eps_storage_resources",
   "build": {
     "dockerfile": "Dockerfile",
     "context": "..",
-    "args": {}
+    "args": {
+      "DOCKER_GID": "${env:DOCKER_GID:}",
+      "IMAGE_NAME": "node_24_python_3_12",
+      "IMAGE_VERSION": "v1.4.9",
+      "USER_UID": "${localEnv:USER_ID:}",
+      "USER_GID": "${localEnv:GROUP_ID:}"
+    }
   },
   "mounts": [
     "source=${env:HOME}${env:USERPROFILE}/.aws,target=/home/vscode/.aws,type=bind",
@@ -14,13 +17,11 @@
     "source=${env:HOME}${env:USERPROFILE}/.gnupg,target=/home/vscode/.gnupg,type=bind",
     "source=${env:HOME}${env:USERPROFILE}/.npmrc,target=/home/vscode/.npmrc,type=bind"
   ],
-  "features": {
-    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
-      "version": "latest",
-      "moby": "true",
-      "installDockerBuildx": "true"
-    }
+  "containerUser": "vscode",
+  "remoteEnv": {
+    "LOCAL_WORKSPACE_FOLDER": "${localWorkspaceFolder}"
   },
+  "features": {},
   "customizations": {
     "vscode": {
       "extensions": [
@@ -44,32 +45,21 @@
         "github.vscode-github-actions"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "/workspaces/eps-prescription-tracker-ui/.venv/bin/python",
+        "python.defaultInterpreterPath": "/workspaces/eps-storage-resources/.venv/bin/python",
         "python.analysis.autoSearchPaths": true,
         "python.analysis.extraPaths": [],
         "python.testing.unittestEnabled": false,
         "python.testing.pytestEnabled": true,
         "pylint.enabled": false,
         "python.linting.flake8Enabled": true,
-        "python.linting.enabled": true, // required to format on save
-        "editor.formatOnPaste": false, // required
-        "editor.formatOnType": false, // required
-        "editor.formatOnSave": true, // optional
+        "python.linting.enabled": true,
+        "editor.formatOnPaste": false,
+        "editor.formatOnType": false,
+        "editor.formatOnSave": true,
         "editor.formatOnSaveMode": "file",
-        "cSpell.words": ["fhir", "Formik", "pino", "serialisation"],
         "editor.defaultFormatter": "dbaeumer.vscode-eslint"
-
       }
     }
   },
-  "postCreateCommand": "rm -f ~/.docker/config.json; git config --global --add safe.directory /workspaces/eps-storage-resources; make install; direnv allow ."
-  // "features": {},
-  // Use 'forwardPorts' to make a list of ports inside the container available locally.
-  // "forwardPorts": [],
-  // Use 'postCreateCommand' to run commands after the container is created.
-  // "postCreateCommand": ""
-  // Configure tool-specific properties.
-  // "customizations": {},
-  // Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
-  // "remoteUser": "root"
+  "postCreateCommand": "rm -f ~/.docker/config.json; git config --global --add safe.directory /workspaces/eps-storage-terraform; make install"
 }

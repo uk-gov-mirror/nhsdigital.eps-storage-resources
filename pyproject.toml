@@ -1,6 +1,7 @@
 
 [project]
 python = "^3.12"
+name = "eps-storage-resources"
 
 [tool.poetry]
 name = "eps-storage-resources"

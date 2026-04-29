@@ -96,7 +96,7 @@ const commonConfig = {
 
 export default [
   {
-    ignores: ["**/lib/*", "**/coverage/*", "**/cdk.out/**"],
+    ignores: ["**/lib/*", "**/coverage/*"],
   },
   {
     rules: eslintJsPlugin.configs.recommended.rules,
@@ -113,22 +113,11 @@ export default [
     ...commonConfig,
   },
   {
-    files: ["**/*.js",],
-
-    languageOptions: {
-      globals: {
-        ...globals.node,
-      },
-    },
-    ...commonConfig,
-  },
-  {
     files: ["**/tests/**/*.ts"],
 
     languageOptions: {
       parser: tsParser,
       globals: {
-        ...globals.jest,
         ...globals.node,
       },
     },

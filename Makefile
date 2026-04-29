@@ -1,10 +1,12 @@
+SHELL=/bin/bash -euo pipefail
+
 guard-%:
 	@ if [ "${${*}}" = "" ]; then \
 		echo "Environment variable $* not set"; \
 		exit 1; \
 	fi
 
-.PHONY: install build test publish release clean
+.PHONY: install build test publish release clean lint
 
 install: install-node install-python install-hooks
 
@@ -44,6 +46,7 @@ clean:
 deep-clean: clean
 	rm -rf .venv
 	find . -name 'node_modules' -type d -prune -exec rm -rf '{}' +
+	poetry env remove --all
 
 check-licenses: check-licenses-node check-licenses-python
 
@@ -90,3 +93,6 @@ cdk-watch: guard-service_name
 		--context serviceName=$$service_name \
 		--context VERSION_NUMBER=$$VERSION_NUMBER \
 		--context COMMIT_ID=$$COMMIT_ID
+
+%:
+	@$(MAKE) -f /usr/local/share/eps/Mk/common.mk $@

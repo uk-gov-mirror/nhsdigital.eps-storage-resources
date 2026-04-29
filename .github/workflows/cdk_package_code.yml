@@ -3,68 +3,64 @@ name: cdk package code
 on:
   workflow_call:
     inputs:
-      VERSION_NUMBER:
-        required: true
+      pinned_image:
         type: string
-      COMMIT_ID:
         required: true
-        type: string
 
+permissions: {}
 
 jobs:
-  package_code:
+  package_cdk_code:
     runs-on: ubuntu-22.04
+    container:
+      image: ${{ inputs.pinned_image }}
+      options: --user 1001:1001 --group-add 128
+    defaults:
+      run:
+        shell: bash
     permissions:
       id-token: write
       contents: read
       packages: read
     steps:
+      - name: copy .tool-versions
+        run: |
+          cp /home/vscode/.tool-versions "$HOME/.tool-versions"
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ env.BRANCH_NAME }}
+          persist-credentials: false
 
-      # using git commit sha for version of action to ensure we have stable version
-      - name: Install asdf
-        uses: asdf-vm/actions/setup@05e0d2ed97b598bfce82fd30daf324ae0c4570e6
-        with:
-          asdf_branch: v0.14.1
-  
-      - name: Cache asdf
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.asdf
-          key: ${{ runner.os }}-asdf-${{ hashFiles('**/.tool-versions') }}
-          restore-keys: |
-            ${{ runner.os }}-asdf-${{ hashFiles('**/.tool-versions') }}
-
-      - name: Install asdf dependencies in .tool-versions
-        uses: asdf-vm/actions/install@05e0d2ed97b598bfce82fd30daf324ae0c4570e6
-        with:
-          asdf_branch: v0.14.1
+      - name: Setting up .npmrc
         env:
-          PYTHON_CONFIGURE_OPTS: --enable-shared
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+          echo "@nhsdigital:registry=https://npm.pkg.github.com" >> ~/.npmrc
 
       - name: make install
         run: |
           make install
-          make compile-node
 
-      - name: 'Tar files'
+      - name: Build Java UDF artifacts
+        run: |
+          make compile
+
+      - name: "Tar files"
         run: |
           tar -rf artifact.tar \
-            .tool-versions \
-            packages \
+            packages/cdk \
+            packages/udfs/dist \
             node_modules \
             package.json \
             package-lock.json \
             tsconfig.defaults.json \
             Makefile \
-            cdk.json
+            .github
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         name: upload build artifact
         with:
-          name: build_artifact
+          name: cdk_build_artifact
           path: artifact.tar

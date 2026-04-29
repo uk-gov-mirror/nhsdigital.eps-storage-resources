@@ -1,0 +1,69 @@
+name: Delete old pull request deployments
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 2,14 * * *"
+
+permissions: {}
+
+jobs:
+  get_config_values:
+    uses: NHSDigital/eps-common-workflows/.github/workflows/get-repo-config.yml@c4efd04c5ff1c7e92e7fe5932b29d0de1a301cdf # v6.0.14
+    with:
+      verify_published_from_main_image: false
+    permissions:
+      attestations: read
+      contents: read
+      packages: read
+
+  delete-old-cloudformation-stacks:
+    needs: [get_config_values]
+    runs-on: ubuntu-22.04
+    container:
+      image: ${{ needs.get_config_values.outputs.pinned_image }}
+      options: --user 1001:1001 --group-add 128
+    environment: dev
+    defaults:
+      run:
+        shell: bash
+    permissions:
+      id-token: write
+      contents: read
+      packages: read
+      pull-requests: read
+
+    steps:
+      - name: copy .tool-versions
+        run: |
+          cp /home/vscode/.tool-versions "$HOME/.tool-versions"
+
+      - name: Checkout local github scripts
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.ref.BRANCH_NAME }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setting up .npmrc
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+          echo "@nhsdigital:registry=https://npm.pkg.github.com" >> ~/.npmrc
+
+      - name: make install
+        run: |
+          make install
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          aws-region: eu-west-2
+          role-to-assume: ${{ secrets.DEV_CLOUD_FORMATION_DEPLOY_ROLE }}
+
+      - name: delete stacks
+        shell: bash
+        run: npm run delete-old-pr-stacks --workspace packages/cdk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
