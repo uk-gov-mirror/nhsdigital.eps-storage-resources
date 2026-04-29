@@ -9,6 +9,7 @@
 .#*
 __pycache__/
 .envrc
+.cfn_guard_out
 .idea
 .vscode/settings.json
 ./sign/
