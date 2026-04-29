@@ -51,7 +51,6 @@ jobs:
         run: |
           tar -rf artifact.tar \
             packages/cdk \
-            packages/udfs/dist \
             node_modules \
             package.json \
             package-lock.json \
