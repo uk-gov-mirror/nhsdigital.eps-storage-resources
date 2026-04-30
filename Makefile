@@ -6,7 +6,7 @@ guard-%:
 		exit 1; \
 	fi
 
-.PHONY: install install-node build test publish release clean lint compile
+.PHONY: install install-node build test publish release clean lint compile cdk-synth
 
 install: install-node install-python install-hooks
 
@@ -66,12 +66,23 @@ aws-login:
 cfn-guard:
 	./scripts/run_cfn_guard.sh
 
-cdk-synth:
-	npx cdk synth \
-		--quiet \
-		--app "npx ts-node --prefer-ts-exts packages/cdk/bin/StorageResourcesApp.ts" \
-		--context VERSION_NUMBER=undefined \
-		--context COMMIT_ID=undefined 
+cdk-synth: cdk-synth-pr cdk-synth-non-pr
+
+cdk-synth-pr:
+	CDK_CONFIG_versionNumber=undefined \
+	CDK_CONFIG_commitId=undefined \
+	CDK_CONFIG_isPullRequest=true \
+	CDK_CONFIG_environment=dev-pr \
+	CDK_CONFIG_stackName=storage-resources-pr-123 \
+	npx cdk synth --quiet --app "tsx -- packages/cdk/bin/StorageResourcesApp.ts"
+
+cdk-synth-non-pr:
+	CDK_CONFIG_versionNumber=undefined \
+	CDK_CONFIG_commitId=undefined \
+	CDK_CONFIG_isPullRequest=false \
+	CDK_CONFIG_environment=dev \
+	CDK_CONFIG_stackName=storage-resources \
+	npx cdk synth --quiet --app "tsx -- packages/cdk/bin/StorageResourcesApp.ts"
 
 cdk-diff: guard-service_name
 	npx cdk diff \
