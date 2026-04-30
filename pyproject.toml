@@ -1,6 +1,6 @@
 
 [project]
-python = "^3.12"
+python = "^3.14"
 name = "eps-storage-resources"
 
 [tool.poetry]
@@ -16,7 +16,7 @@ repository = "https://github.com/NHSDigital/eps-storage-resources"
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.12"
+python = "^3.14"
 pytest = "^8.3.4"
 
 [tool.poetry.scripts]
