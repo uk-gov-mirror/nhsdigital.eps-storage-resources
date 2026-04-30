@@ -2,12 +2,10 @@
   "name": "cdk",
   "version": "0.1.0",
   "scripts": {
-    "build": "tsc",
-    "watch": "tsc -w",
     "test": "jest",
-    "cdk": "cdk",
-    "lint": "eslint  --max-warnings 0 --fix --config ../../eslint.config.mjs .",
-    "check-licenses": "license-checker --failOn GPL --failOn LGPL --start ../.."
+    "cdk-prepare-changeset": "cdk deploy ${CDK_STACK_NAME} --change-set-name ${CDK_CHANGE_SET_NAME} --method prepare-change-set --app \"tsx -- bin/${CDK_APP_NAME}.ts\" --require-approval ${REQUIRE_APPROVAL}",
+    "delete-old-pr-stacks": "tsx -- scripts/deletePrStacks.ts",
+    "lint": "eslint  --max-warnings 0 --fix --config ../../eslint.config.mjs ."
   },
   "dependencies": {
     "@nhsdigital/eps-cdk-constructs": "^1.6.1",
