@@ -60,6 +60,5 @@
         "editor.defaultFormatter": "dbaeumer.vscode-eslint"
       }
     }
-  },
-  "postCreateCommand": "rm -f ~/.docker/config.json; git config --global --add safe.directory /workspaces/eps-storage-terraform; make install"
+  }
 }
